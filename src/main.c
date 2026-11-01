@@ -8,28 +8,35 @@
 PSP_MODULE_INFO("Downhill PSP", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
-#define SCREEN_WIDTH 480
-#define SCREEN_HEIGHT 272
+#define W 480
+#define H 272
 
 static unsigned int __attribute__((aligned(16))) list[262144];
+
+typedef struct {
+    float x, y, z;
+    unsigned int color;
+} Vertex;
 
 void rectangle(float x1, float y1, float x2, float y2,
                unsigned int color)
 {
-    struct Vertex {
-        float x, y, z;
-        unsigned int color;
-    };
+    Vertex *v = (Vertex *)sceGuGetMemory(sizeof(Vertex) * 2);
 
-    struct Vertex vertices[2] = {
-        {x1, y1, 0, color},
-        {x2, y2, 0, color}
-    };
+    v[0].x = x1;
+    v[0].y = y1;
+    v[0].z = 0;
+    v[0].color = color;
+
+    v[1].x = x2;
+    v[1].y = y2;
+    v[1].z = 0;
+    v[1].color = color;
 
     sceGuDrawArray(
         GU_SPRITES,
         GU_VERTEX_32BITF | GU_COLOR_8888 | GU_TRANSFORM_2D,
-        2, 0, vertices
+        2, 0, v
     );
 }
 
@@ -40,15 +47,13 @@ int main(void)
     sceGuStart(GU_DIRECT, list);
 
     sceGuDrawBuffer(GU_PSM_8888, (void *)0, 512);
-    sceGuDispBuffer(SCREEN_WIDTH, SCREEN_HEIGHT,
-                    (void *)(512 * 272 * 4), 512);
+    sceGuDispBuffer(W, H, (void *)(512 * 272 * 4), 512);
     sceGuDepthBuffer((void *)(512 * 272 * 8), 512);
 
-    sceGuOffset(2048 - (SCREEN_WIDTH / 2),
-                2048 - (SCREEN_HEIGHT / 2));
+    sceGuOffset(2048 - 240, 2048 - 136);
+    sceGuViewport(2048, 2048, W, H);
+    sceGuScissor(0, 0, W, H);
 
-    sceGuViewport(2048, 2048, SCREEN_WIDTH, SCREEN_HEIGHT);
-    sceGuScissor(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDisable(GU_DEPTH_TEST);
     sceGuDisable(GU_TEXTURE_2D);
@@ -69,14 +74,12 @@ int main(void)
     {
         sceCtrlPeekBufferPositive(&pad, 1);
 
-        // Gerakan pemain ke kiri dan kanan
         if (pad.Buttons & PSP_CTRL_LEFT)
             playerX -= 3.0f;
 
         if (pad.Buttons & PSP_CTRL_RIGHT)
             playerX += 3.0f;
 
-        // Batas gerakan pemain
         if (playerX < 80.0f)
             playerX = 80.0f;
 
@@ -84,6 +87,9 @@ int main(void)
             playerX = 400.0f;
 
         sceGuStart(GU_DIRECT, list);
+
+        sceGuClearColor(GU_RGBA(90, 180, 240, 255));
+        sceGuClear(GU_COLOR_BUFFER_BIT);
 
         // Langit
         rectangle(0, 0, 480, 272,
@@ -97,7 +103,7 @@ int main(void)
         rectangle(0, 150, 480, 272,
                   GU_RGBA(40, 145, 55, 255));
 
-        // Jalur downhill
+        // Lintasan
         rectangle(125, 110, 355, 272,
                   GU_RGBA(110, 75, 45, 255));
 
@@ -117,7 +123,7 @@ int main(void)
         rectangle(385, 85, 455, 145,
                   GU_RGBA(20, 110, 35, 255));
 
-        // Pemain sepeda sederhana
+        // Pemain
         rectangle(playerX - 12, 205,
                   playerX + 12, 232,
                   GU_RGBA(25, 25, 30, 255));
