@@ -1,10 +1,11 @@
-
 TARGET = downhill
 OBJS = src/main.o
 
 CFLAGS = -G0 -Wall
 CXXFLAGS = $(CFLAGS)
 ASFLAGS = $(CFLAGS)
+
+LIBS = -lpspgu -lpspdisplay
 
 BUILD_PRX = 1
 PSP_FW_VERSION = 660
