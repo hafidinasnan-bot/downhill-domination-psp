@@ -2,50 +2,35 @@
 #include <pspkernel.h>
 #include <pspdisplay.h>
 #include <pspgu.h>
-#include <pspdebug.h>
 #include <pspctrl.h>
+#include <pspgum.h>
 
-PSP_MODULE_INFO("Downhill Prototype", 0, 1, 0);
-PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
+PSP_MODULE_INFO("Downhill PSP", 0, 1, 0);
+PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
-#define W 480
-#define H 272
-#define BUF 512
+#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 272
 
 static unsigned int __attribute__((aligned(16))) list[262144];
-
-typedef struct {
-    unsigned int color;
-    float x, y, z;
-} Vertex;
 
 void rectangle(float x1, float y1, float x2, float y2,
                unsigned int color)
 {
-    Vertex v[] = {
-        {color, x1, y1, 0},
-        {color, x2, y1, 0},
-        {color, x1, y2, 0},
-        {color, x2, y2, 0}
+    struct Vertex {
+        float x, y, z;
+        unsigned int color;
     };
 
-    sceGuDrawArray(GU_TRIANGLE_STRIP,
-        GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D,
-        4, 0, v);
-}
-
-void triangle(float x1, float y1, float x2, float y2,
-              float x3, float y3, unsigned int color)
-{
-    Vertex v[] = {
-        {color, x1, y1, 0},
-        {color, x2, y2, 0},
-        {color, x3, y3, 0}
+    struct Vertex vertices[2] = {
+        {x1, y1, 0, color},
+        {x2, y2, 0, color}
     };
 
-    sceGuDrawArray(GU_TRIANGLES,
-        GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D,
-        3, 0, v);
+    sceGuDrawArray(
+        GU_SPRITES,
+        GU_VERTEX_32BITF | GU_COLOR_8888 | GU_TRANSFORM_2D,
+        2, 0, vertices
+    );
 }
 
 int main(void)
@@ -54,16 +39,19 @@ int main(void)
 
     sceGuStart(GU_DIRECT, list);
 
-    sceGuDrawBuffer(GU_PSM_8888, (void*)0, BUF);
-    sceGuDispBuffer(W, H, (void*)0x88000, BUF);
-    sceGuDepthBuffer((void*)0x110000, BUF);
+    sceGuDrawBuffer(GU_PSM_8888, (void *)0, 512);
+    sceGuDispBuffer(SCREEN_WIDTH, SCREEN_HEIGHT,
+                    (void *)(512 * 272 * 4), 512);
+    sceGuDepthBuffer((void *)(512 * 272 * 8), 512);
 
-    sceGuOffset(2048 - W / 2, 2048 - H / 2);
-    sceGuViewport(2048, 2048, W, H);
-    sceGuScissor(0, 0, W, H);
+    sceGuOffset(2048 - (SCREEN_WIDTH / 2),
+                2048 - (SCREEN_HEIGHT / 2));
 
+    sceGuViewport(2048, 2048, SCREEN_WIDTH, SCREEN_HEIGHT);
+    sceGuScissor(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDisable(GU_DEPTH_TEST);
+    sceGuDisable(GU_TEXTURE_2D);
 
     sceGuFinish();
     sceGuSync(0, 0);
@@ -71,63 +59,77 @@ int main(void)
     sceDisplayWaitVblankStart();
     sceGuDisplay(GU_TRUE);
 
+    sceCtrlSetSamplingCycle(0);
+    sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
+
+    float playerX = 240.0f;
+    SceCtrlData pad;
+
     while (1)
     {
+        sceCtrlPeekBufferPositive(&pad, 1);
+
+        // Gerakan pemain ke kiri dan kanan
+        if (pad.Buttons & PSP_CTRL_LEFT)
+            playerX -= 3.0f;
+
+        if (pad.Buttons & PSP_CTRL_RIGHT)
+            playerX += 3.0f;
+
+        // Batas gerakan pemain
+        if (playerX < 80.0f)
+            playerX = 80.0f;
+
+        if (playerX > 400.0f)
+            playerX = 400.0f;
+
         sceGuStart(GU_DIRECT, list);
 
-        sceGuClearColor(GU_RGBA(100, 190, 240, 255));
-        sceGuClear(GU_COLOR_BUFFER_BIT);
+        // Langit
+        rectangle(0, 0, 480, 272,
+                  GU_RGBA(90, 180, 240, 255));
 
-        // Langit dan pegunungan
-        triangle(0, 150, 120, 35, 240, 150,
-                 GU_RGBA(65, 105, 90, 255));
+        // Pegunungan
+        rectangle(0, 95, 480, 150,
+                  GU_RGBA(90, 120, 100, 255));
 
-        triangle(160, 150, 310, 20, 480, 150,
-                 GU_RGBA(75, 120, 95, 255));
+        // Tanah
+        rectangle(0, 150, 480, 272,
+                  GU_RGBA(40, 145, 55, 255));
 
-        // Rumput
-        rectangle(0, 145, 480, 272,
-                  GU_RGBA(35, 145, 55, 255));
+        // Jalur downhill
+        rectangle(125, 110, 355, 272,
+                  GU_RGBA(110, 75, 45, 255));
 
-        // Pepohonan
-        triangle(20, 170, 55, 75, 90, 170,
-                 GU_RGBA(15, 90, 35, 255));
+        // Garis lintasan
+        rectangle(235, 130, 245, 272,
+                  GU_RGBA(230, 220, 180, 255));
 
-        triangle(390, 170, 430, 65, 470, 170,
-                 GU_RGBA(15, 90, 35, 255));
+        // Pohon kiri
+        rectangle(35, 125, 55, 190,
+                  GU_RGBA(100, 65, 30, 255));
+        rectangle(10, 85, 80, 145,
+                  GU_RGBA(20, 110, 35, 255));
 
-        // Lintasan menurun
-        triangle(190, 75, 290, 75, 450, 272,
-                 GU_RGBA(105, 90, 75, 255));
+        // Pohon kanan
+        rectangle(410, 125, 430, 190,
+                  GU_RGBA(100, 65, 30, 255));
+        rectangle(385, 85, 455, 145,
+                  GU_RGBA(20, 110, 35, 255));
 
-        triangle(190, 75, 450, 272, 30, 272,
-                 GU_RGBA(105, 90, 75, 255));
-
-        // Pembatas lintasan
-        triangle(180, 75, 190, 75, 30, 272,
-                 GU_RGBA(220, 220, 190, 255));
-
-        triangle(290, 75, 300, 75, 450, 272,
-                 GU_RGBA(220, 220, 190, 255));
-
-        // Garis tengah lintasan
-        rectangle(237, 105, 243, 130,
-                  GU_RGBA(255, 255, 255, 255));
-
-        rectangle(225, 155, 255, 185,
-                  GU_RGBA(255, 255, 255, 255));
-
-        // Sepeda dan pembalap sederhana
-        rectangle(228, 205, 252, 232,
+        // Pemain sepeda sederhana
+        rectangle(playerX - 12, 205,
+                  playerX + 12, 232,
                   GU_RGBA(25, 25, 30, 255));
 
-        rectangle(220, 228, 260, 235,
+        rectangle(playerX - 20, 228,
+                  playerX + 20, 235,
                   GU_RGBA(230, 35, 35, 255));
 
-        rectangle(230, 235, 250, 265,
+        rectangle(playerX - 10, 235,
+                  playerX + 10, 265,
                   GU_RGBA(25, 25, 30, 255));
 
-        // Judul
         sceGuFinish();
         sceGuSync(0, 0);
 
@@ -136,5 +138,7 @@ int main(void)
     }
 
     sceGuTerm();
+    sceKernelExitGame();
+
     return 0;
 }
